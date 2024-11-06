@@ -849,7 +849,7 @@ class MCDODE():
         tt_e = dta.get_car_link_tt(np.arange(0, self.num_loading_interval, self.ass_freq), False).flatten(order='F')
         # tt_free = np.tile(list(map(lambda x: self.nb.get_link(x).get_car_fft(), self.observed_links)), (self.num_assign_interval))
         tt_free = np.tile(dta.get_car_link_fftt(self.observed_links), (self.num_assign_interval))
-        tt_e = np.maximum(tt_e, tt_free)
+        tt_e = np.maximum(tt_e, tt_free) #! calculate d_DNLTime/d_linkFlow
         tt_o = np.maximum(one_data_dict['car_link_tt'], tt_free) 
         # tt_o = one_data_dict['car_link_tt']
         # print('o-----', tt_o)
@@ -1667,7 +1667,7 @@ class MCDODE():
         
         for i in range(max_epoch):
       
-            seq = np.random.permutation(self.num_data)
+            seq = np.random.permutation(self.num_data) #! Stochastic gradient descent, randomly pick one day, backpropagate
             loss = float(0)
             # print("Start iteration", time.time())
             loss_dict = {'car_count_loss': 0.0, 'truck_count_loss': 0.0, 'car_tt_loss': 0.0, 'truck_tt_loss': 0.0, 'origin_vehicle_registration_loss': 0.0}
@@ -1682,7 +1682,7 @@ class MCDODE():
 
             for j in seq:
                 one_data_dict = self._get_one_data(j)
-                car_grad, truck_grad, tmp_loss, tmp_loss_dict, dta, x_e_car, x_e_truck, tt_e_car, tt_e_truck, O_demand = self.compute_path_flow_grad_and_loss(one_data_dict, f_car, f_truck)
+                car_grad, truck_grad, tmp_loss, tmp_loss_dict, dta, x_e_car, x_e_truck, tt_e_car, tt_e_truck, O_demand = self.compute_path_flow_grad_and_loss(one_data_dict, f_car, f_truck) #! compute gradients
                 # print("gradient", car_grad, truck_grad)
 
                 if column_generation[i] == 0:

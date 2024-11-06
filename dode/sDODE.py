@@ -292,6 +292,7 @@ class SDODE():
 
 
 ###  Behavior related function
+#! OD to path route choice function
 def generate_portion_array(cost_array, theta=0.1):
   p_array = np.zeros(cost_array.shape)
   for i in range(cost_array.shape[1]):
