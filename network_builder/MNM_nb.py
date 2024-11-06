@@ -9,6 +9,8 @@ from scipy.sparse import coo_matrix
 DLINK_ENUM = ['CTM', 'LQ', 'LTM', 'PQ']
 DNODE_ENUM = ['FWJ', 'GRJ', 'DMOND', 'DMDND']
 
+DNODE_COLOR_CODE = {"FWJ": "lightgrey", "GRJ": "#6DB1BF", "DMOND": "#F39A9D", "DMDND": "#3F6C51"}
+DLINK_FORMAT_CODE = {"CTM": "solid", "LQ": "dotted", "LTM": "dashdot", "PQ": "dashed"}
 
 class MNM_dlink():
   """
@@ -453,6 +455,7 @@ class MNM_path():
     assert(self.route_portions is not None)
     return ' '.join(['{:.12f}'.format(e) for e in self.route_portions])
 
+# This class is named MNM_pathset and likely contains functionality related to managing sets of paths.
 class MNM_pathset():
   """
   A class to represent a set of paths between an origin and a destination node.
@@ -1046,3 +1049,75 @@ class MNM_network_builder():
     P = coo_matrix((val, (row, col)), 
                    shape=(num_one_path * num_intervals, num_one_OD * num_intervals)).tocsr()
     return P
+  
+  def plot_network_by_nx(self, ax):
+    # Now let's plot the graph
+    g = self.graph.G # get networkx directed graph
+    # Create a layout for our nodes 
+    layout = nx.spring_layout(g)
+
+    # Extract node types and map to colors
+    node_id_to_type = {node.ID: node.typ for node in self.node_list}
+    node_colors = [DNODE_COLOR_CODE[node_id_to_type[node_id]] for node_id in g.nodes()]
+
+    # Draw the nodes
+    nx.draw_networkx_nodes(g, layout, node_size=500, node_color=node_colors, ax=ax)
+
+    # Draw the edges
+    nx.draw_networkx_edges(g, layout, arrows=True, edge_color="lightgrey", ax=ax)
+
+    # Add labels to the nodes
+    nx.draw_networkx_labels(g, layout, font_size=12, font_family='sans-serif', ax=ax)
+
+    # Add edge labels (using the edge_id)
+    edge_labels = {(edge[0], edge[1]): edge[2]["ID"] for edge in g.edges(data=True)}
+    nx.draw_networkx_edge_labels(g, layout, edge_labels=edge_labels, ax=ax)
+
+    # Remove axis
+    ax.axis('off')
+    return ax
+  
+  def plot_network_by_pyvis(self, data=None, edge_color_column=None, notebook=True, output_html="network.html"):
+    from pyvis.network import Network
+    # Get the NetworkX directed graph
+    g = self.graph.G
+
+    # Create a Pyvis Network
+    net = Network(notebook=True, directed=True)
+
+    # Extract node types and map to colors
+    node_id_to_type = {node.ID: node.typ for node in self.node_list}
+    for node_id in g.nodes():
+        net.add_node(node_id, color=DNODE_COLOR_CODE[node_id_to_type[node_id]], label=str(node_id), labelPosition="top")
+
+    # Extract edge types and map to colors and styles
+    edge_id_to_stats = {edge.ID: {"type": edge.typ,
+                                  "length": edge.length*50,
+                                  "ffs": edge.ffs/20. if edge.typ =="FWY" else 5,
+                                  } for edge in self.link_list}
+    
+    if edge_color_column is not None and data is not None:
+      import matplotlib.pyplot as plt
+      import matplotlib.colors as mcolors
+
+      # Normalize the color value to be between 0 and 1
+      norm = mcolors.Normalize(vmin=min(data[edge_id][edge_color_column] for edge_id in data), 
+                    vmax=max(data[edge_id][edge_color_column] for edge_id in data))
+      cmap = plt.get_cmap('Wistia')  # You can choose any colormap you like
+    
+    for edge in g.edges(data=True):
+        edge_id = edge[2]["ID"]
+        title_text = f"ID:{edge_id}\nLength: {edge_id_to_stats[edge_id]['length']}" if data is None else f"ID:{edge_id}\n"+'\n'.join([f"{k}: {v}" for k, v in data[edge_id].items()])
+        color = "lightgrey" 
+        if edge_color_column is not None and data is not None:
+            color_val = data[edge_id][edge_color_column]
+            # Get the color from the colormap
+            color = mcolors.to_hex(cmap(norm(color_val)))
+        net.add_edge(edge[0], edge[1], color=color, arrows="to", width=edge_id_to_stats[edge_id]["ffs"], length=edge_id_to_stats[edge_id]["length"], 
+               label=str(edge_id), 
+               title=title_text, 
+               labelHighlightBold=True, 
+               labelPosition="middle")
+        
+    # Generate the network visualization
+    net.show(output_html)
