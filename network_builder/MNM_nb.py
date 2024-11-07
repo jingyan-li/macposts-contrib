@@ -8,10 +8,8 @@ from scipy.sparse import coo_matrix
 
 DLINK_ENUM = ['CTM', 'LQ', 'LTM', 'PQ']
 DNODE_ENUM = ['FWJ', 'GRJ', 'DMOND', 'DMDND']
-
 DNODE_COLOR_CODE = {"FWJ": "lightgrey", "GRJ": "#6DB1BF", "DMOND": "#F39A9D", "DMDND": "#3F6C51"}
-DLINK_FORMAT_CODE = {"CTM": "solid", "LQ": "dotted", "LTM": "dashdot", "PQ": "dashed"}
-
+DLINK_FORMAT_CODE = {"CTM": False, "LQ": True, "LTM": True, "PQ": True}
 class MNM_dlink():
   """
   A class to represent a network link in a traffic simulation model.
@@ -835,6 +833,15 @@ class MNM_network_builder():
 
 
   def get_link(self, ID):
+    """
+    Retrieve a link from the link list by its ID.
+
+    Args:
+      ID (int): The unique identifier of the link to retrieve.
+
+    Returns:
+      Link: The link object with the specified ID if found, otherwise None.
+    """
     for link in self.link_list:
       if link.ID == ID:
         return link
@@ -1005,6 +1012,21 @@ class MNM_network_builder():
     self.network_name = name
 
   def update_demand_path(self, f):
+    """
+    Updates the demand path based on the provided demand matrix.
+    This function reshapes the input demand matrix `f` to match the number of 
+    paths and the maximum interval defined in the configuration. It then updates 
+    the route choice portions for each path and normalizes the route portions 
+    for each origin-destination (OD) pair. Finally, it updates the demand dictionary 
+    and sets the route choice flag to True.
+    Args:
+      f (numpy.ndarray): A 1D array representing the demand matrix. The length 
+                 of the array should be equal to the product of the 
+                 number of paths and the maximum interval.
+    Raises:
+      AssertionError: If the length of `f` does not match the expected size 
+              based on the number of paths and the maximum interval.
+    """
     assert (len(f) == len(self.path_table.ID2path) * self.config.config_dict['DTA']['max_interval'])
     f = f.reshape(self.config.config_dict['DTA']['max_interval'], len(self.path_table.ID2path))
     for i, path_ID in enumerate(self.path_table.ID2path.keys()):
@@ -1018,6 +1040,14 @@ class MNM_network_builder():
     self.route_choice_flag = True
 
   def get_path_flow(self):
+    """
+    Calculate the path flow matrix for the network.
+    This method computes the path flow matrix `f` where each element `f[t, i]` 
+    represents the flow on path `i` at time interval `t`. The flow is calculated 
+    based on the route portions of each path and the demand between origin-destination pairs.
+    Returns:
+      numpy.ndarray: A flattened array representing the path flow matrix.
+    """
     f = np.zeros((self.config.config_dict['DTA']['max_interval'], len(self.path_table.ID2path)))
     for i, ID in enumerate(self.path_table.ID2path.keys()):
       path = self.path_table.ID2path[ID]
@@ -1026,6 +1056,18 @@ class MNM_network_builder():
     return f.flatten()
 
   def get_route_portion_matrix(self):
+    """
+    Generates a route portion matrix for the transportation network.
+    This method constructs a sparse matrix where each element represents the 
+    portion of a specific path used for a given origin-destination (OD) pair 
+    over different time intervals. The matrix is constructed using the 
+    Compressed Sparse Row (CSR) format for efficient storage and computation.
+    Returns:
+      scipy.sparse.csr_matrix: A sparse matrix of shape 
+      (num_one_path * num_intervals, num_one_OD * num_intervals) where 
+      num_one_path is the number of unique paths, num_intervals is the 
+      number of time intervals, and num_one_OD is the number of OD pairs.
+    """
     num_intervals = self.config.config_dict['DTA']['max_interval']
     for O_node in self.path_table.path_dict.keys():
       for D_node in self.path_table.path_dict[O_node].keys():
@@ -1051,6 +1093,16 @@ class MNM_network_builder():
     return P
   
   def plot_network_by_nx(self, ax):
+    """
+    Plots the network using NetworkX.
+    This function visualizes the network graph using NetworkX's drawing capabilities.
+    It plots nodes, edges, and labels on the provided Matplotlib axis.
+    Parameters:
+    ax (matplotlib.axes.Axes): The Matplotlib axis on which to plot the network.
+    Returns:
+    matplotlib.axes.Axes: The axis with the plotted network.
+    """
+    
     # Now let's plot the graph
     g = self.graph.G # get networkx directed graph
     # Create a layout for our nodes 
@@ -1078,6 +1130,22 @@ class MNM_network_builder():
     return ax
   
   def plot_network_by_pyvis(self, data=None, edge_color_column=None, notebook=True, output_html="network.html"):
+    """
+    Visualizes the network using Pyvis and NetworkX.
+    Parameters:
+    -----------
+    data : dict, optional
+      A dictionary containing edge data. The keys are edge IDs and the values are dictionaries with edge attributes to be visualized.
+    edge_color_column : str, optional
+      The key in the `data` dictionary whose values will be used to color the edges.
+    notebook : bool, default=True
+      If True, the visualization will be displayed in a Jupyter notebook.
+    output_html : str, default="network.html"
+      The name of the output HTML file where the network visualization will be saved.
+    Returns:
+    --------
+    None
+    """
     from pyvis.network import Network
     # Get the NetworkX directed graph
     g = self.graph.G
@@ -1092,18 +1160,18 @@ class MNM_network_builder():
 
     # Extract edge types and map to colors and styles
     edge_id_to_stats = {edge.ID: {"type": edge.typ,
-                                  "length": edge.length*50,
-                                  "ffs": edge.ffs/20. if edge.typ =="FWY" else 5,
-                                  } for edge in self.link_list}
+                                "length": edge.length*50.,
+                                "ffs": edge.ffs/20. if edge.typ =="FWY" else 5,
+                                } for edge in self.link_list}
     
     if edge_color_column is not None and data is not None:
-      import matplotlib.pyplot as plt
-      import matplotlib.colors as mcolors
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
 
-      # Normalize the color value to be between 0 and 1
-      norm = mcolors.Normalize(vmin=min(data[edge_id][edge_color_column] for edge_id in data), 
-                    vmax=max(data[edge_id][edge_color_column] for edge_id in data))
-      cmap = plt.get_cmap('Wistia')  # You can choose any colormap you like
+        # Normalize the color value to be between 0 and 1
+        norm = mcolors.Normalize(vmin=min(data[edge_id][edge_color_column] for edge_id in data), 
+                        vmax=max(data[edge_id][edge_color_column] for edge_id in data))
+        cmap = plt.get_cmap('Wistia')  # You can choose any colormap you like
     
     for edge in g.edges(data=True):
         edge_id = edge[2]["ID"]
@@ -1113,11 +1181,14 @@ class MNM_network_builder():
             color_val = data[edge_id][edge_color_column]
             # Get the color from the colormap
             color = mcolors.to_hex(cmap(norm(color_val)))
-        net.add_edge(edge[0], edge[1], color=color, arrows="to", width=edge_id_to_stats[edge_id]["ffs"], length=edge_id_to_stats[edge_id]["length"], 
-               label=str(edge_id), 
-               title=title_text, 
-               labelHighlightBold=True, 
-               labelPosition="middle")
+        net.add_edge(edge[0], edge[1], color=color,
+                    value=edge_id_to_stats[edge_id]["ffs"], 
+                    length=edge_id_to_stats[edge_id]["length"], 
+                    label=str(edge_id), 
+                    dashes=DLINK_FORMAT_CODE[edge_id_to_stats[edge_id]["type"]],
+                    title=title_text, 
+                    labelHighlightBold=True, 
+                    labelPosition="middle")
         
     # Generate the network visualization
     net.show(output_html)
